@@ -1,9 +1,13 @@
-#include <jni.h>
+#include "includes/sandhook.h"
 #include "includes/cast_art_method.h"
 #include "includes/trampoline_manager.h"
 #include "includes/hide_api.h"
 #include "includes/cast_compiler_options.h"
 #include "includes/log.h"
+#include "includes/native_hook.h"
+#include "includes/elf_util.h"
+
+#include <jni.h>
 
 SandHook::TrampolineManager trampolineManager;
 
@@ -66,6 +70,14 @@ bool doHookWithReplacement(JNIEnv* env,
         hookMethod->disableCompilable();
     }
 
+    if (SDK_INT > ANDROID_N) {
+        forceProcessProfiles();
+    }
+    if ((SDK_INT >= ANDROID_N && SDK_INT <= ANDROID_P)
+        || (SDK_INT >= ANDROID_Q && !originMethod->isAbstract())) {
+        originMethod->setHotnessCount(0);
+    }
+
     if (backupMethod != nullptr) {
         originMethod->backup(backupMethod);
         backupMethod->disableCompilable();
@@ -110,6 +122,13 @@ bool doHookWithInline(JNIEnv* env,
     }
 
     originMethod->disableCompilable();
+    if (SDK_INT > ANDROID_N) {
+        forceProcessProfiles();
+    }
+    if ((SDK_INT >= ANDROID_N && SDK_INT <= ANDROID_P)
+        || (SDK_INT >= ANDROID_Q && !originMethod->isAbstract())) {
+        originMethod->setHotnessCount(0);
+    }
     originMethod->flushCache();
 
     SandHook::HookTrampoline* hookTrampoline = trampolineManager.installInlineTrampoline(originMethod, hookMethod, backupMethod);
@@ -321,6 +340,12 @@ Java_com_swift_sandhook_SandHook_disableVMInline(JNIEnv *env, jclass type) {
 }
 
 extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_swift_sandhook_SandHook_disableDex2oatInline(JNIEnv *env, jclass type, jboolean disableDex2oat) {
+    return static_cast<jboolean>(SandHook::NativeHook::hookDex2oat(disableDex2oat));
+}
+
+extern "C"
 JNIEXPORT void JNICALL
 Java_com_swift_sandhook_ClassNeverCall_neverCallNative(JNIEnv *env, jobject instance) {
     int a = 1 + 1;
@@ -340,6 +365,25 @@ JNIEXPORT void JNICALL
 Java_com_swift_sandhook_test_TestClass_jni_1test(JNIEnv *env, jobject instance) {
     int a = 1 + 1;
     int b = a + 1;
+}
+
+//native hook
+extern "C"
+JNIEXPORT bool nativeHookNoBackup(void* origin, void* hook) {
+
+    if (origin == nullptr || hook == nullptr)
+        return false;
+
+    SandHook::StopTheWorld stopTheWorld;
+
+    return trampolineManager.installNativeHookTrampolineNoBackup(origin, hook) != nullptr;
+
+}
+
+extern "C"
+JNIEXPORT void* findSym(const char *elf, const char *sym_name) {
+    SandHook::ElfImg elfImg(elf);
+    return reinterpret_cast<void *>(elfImg.getSymbAddress(sym_name));
 }
 
 static JNINativeMethod jniSandHook[] = {
@@ -407,6 +451,11 @@ static JNINativeMethod jniSandHook[] = {
                 "disableVMInline",
                 "()Z",
                 (void *) Java_com_swift_sandhook_SandHook_disableVMInline
+        },
+        {
+                "disableDex2oatInline",
+                "(Z)Z",
+                (void *) Java_com_swift_sandhook_SandHook_disableDex2oatInline
         }
 };
 

@@ -1,6 +1,6 @@
 # SandHook
-Android ART Hook
-
+- Android ART Hook
+- Native Inline Hook
 ## Version 
 
 [ ![Version](https://api.bintray.com/packages/ganyao114/maven/hooklib/images/download.svg) ](https://bintray.com/ganyao114/maven/hooklib/_latestVersion)
@@ -9,7 +9,9 @@ Android ART Hook
 
 [中文文档以及实现](https://github.com/ganyao114/SandHook/blob/master/doc/doc.md)
 
-[中文 Blog](https://blog.csdn.net/ganyao939543405/article/details/86661040)
+[中文 Blog](https://blog.csdn.net/ganyao939543405/article/details/86661040)  
+
+QQ Group：756071167
 
 # arch support 
 
@@ -166,19 +168,31 @@ you must call backup method in hook method, if you want call it in other method,
 because when ART trigger JIT from profiling, JIT will invoke -> ResolveCompilingMethodsClass -> ClassLinker::ResolveMethod -> CheckIncompatibleClassChange -> ThrowIncompatibleClassChangeError finally!!!
 
 
-## Inline
+## Disable Inline
 
-### disable JIT inline
+### JIT inline
 
 We can do nothing to prevent some methods been inlined before app start, but we can try to disable VM Jit Inline after launch.
 
 if you will hook some method that could be inlined, please call SandHook.disableVMInline()(OS >= 7.0) in Application.OnCreate()
 
+### Inline by dex2oat
 
-### Deoptimize
+#### Background dex2oat
+
+SandHook.tryDisableProfile(getPackageName());
+
+#### dex2oat by DexClassLoader
+
+SandHook.disableDex2oatInline(fullyDisableDex2oat);
+
+or
+
+ArtDexOptimizer.dexoatAndDisableInline to dex2oat manuly 
+
+### Deoptimize(Boot Image)
 
 You can also deoptimize a caller that inlined your hook method by SandHook.deCompile(caller), just implement >= 7.0
-
 
 ## Hidden API
 
@@ -186,6 +200,34 @@ SandHook.passApiCheck();
 
 To bypass hidden api on P & Q
 
+# Native Hook
+
+## simple hook(no backup)
+#include "includes/sandhook.h"  
+
+bool nativeHookNoBackup(void* origin, void* hook);
+
+## need backup origin method
+#include "sanhook_native.h"  
+
+void* SandInlineHook(void* origin, void* replace);  
+
+void* SandInlineHookSym(const char* so, const char* symb, void* replace);  
+
+
+return is backup method
+
+## break point
+
+you can insert a break point in body of method(not only start of method), so you can read/write registers in break point.  
+
+
+bool SandBreakpoint(void* origin, void (*callback)(REG[]));
+
+## more
+
+- disassembler (only implement important instructions)
+- assembler (only implement important instructions)
 
 # Demo
 
@@ -201,7 +243,7 @@ Unofficial xposed framework >= 8.0
 
 See release above
 
-https://github.com/ElderDrivers/EdXposed/tree/sandhook
+https://github.com/ElderDrivers/EdXposed
 
 # Android Q(10.0)
 

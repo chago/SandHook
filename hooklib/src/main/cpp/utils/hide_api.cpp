@@ -27,6 +27,8 @@ extern "C" {
     //for Android Q
     void (**origin_jit_update_options)(void *) = nullptr;
 
+    void (*profileSaver_ForceProcessProfiles)() = nullptr;
+
     const char* art_lib_path;
     const char* jit_lib_path;
 
@@ -58,7 +60,7 @@ extern "C" {
             bool generate_debug_info = false;
             jitCompilerHandle = (jitLoad)(&generate_debug_info);
 
-            if (jitCompilerHandle != nullptr && jitCompilerHandle > 0) {
+            if (jitCompilerHandle != nullptr) {
                 art::CompilerOptions* compilerOptions = getCompilerOptions(
                         reinterpret_cast<art::jit::JitCompiler *>(jitCompilerHandle));
                 disableJitInline(compilerOptions);
@@ -97,10 +99,14 @@ extern "C" {
             origin_jit_update_options = reinterpret_cast<void (**)(void *)>(getSymCompat(art_lib_path, "_ZN3art3jit3Jit20jit_update_options_E"));
         }
 
+        if (SDK_INT > ANDROID_N) {
+            profileSaver_ForceProcessProfiles = reinterpret_cast<void (*)()>(getSymCompat(art_lib_path, "_ZN3art12ProfileSaver20ForceProcessProfilesEv"));
+        }
+
     }
 
     bool canCompile() {
-        if (getGlobalJitCompiler() == nullptr || getGlobalJitCompiler() <= 0) {
+        if (getGlobalJitCompiler() == nullptr) {
             LOGE("JIT not init!");
             return false;
         }
@@ -159,7 +165,7 @@ extern "C" {
     art::jit::JitCompiler* getGlobalJitCompiler() {
         if (SDK_INT < ANDROID_N)
             return nullptr;
-        if (globalJitCompileHandlerAddr == nullptr || globalJitCompileHandlerAddr <= 0)
+        if (globalJitCompileHandlerAddr == nullptr)
             return nullptr;
         return *globalJitCompileHandlerAddr;
     }
@@ -175,7 +181,7 @@ extern "C" {
     }
 
     bool disableJitInline(art::CompilerOptions* compilerOptions) {
-        if (compilerOptions == nullptr || compilerOptions <= 0)
+        if (compilerOptions == nullptr)
             return false;
         size_t originOptions = compilerOptions->getInlineMaxCodeUnits();
         //maybe a real inlineMaxCodeUnits
@@ -207,11 +213,17 @@ extern "C" {
         if (SDK_INT < ANDROID_Q)
             return false;
         if (origin_jit_update_options == nullptr
-            || origin_jit_update_options <= 0
-            || *origin_jit_update_options == nullptr
-            || *origin_jit_update_options <= 0)
+            || *origin_jit_update_options == nullptr)
             return false;
         *origin_jit_update_options = fake_jit_update_options;
+        return true;
+    }
+
+    bool forceProcessProfiles() {
+        if (profileSaver_ForceProcessProfiles == nullptr)
+            return false;
+        profileSaver_ForceProcessProfiles();
+        return true;
     }
 
 }
